@@ -1,0 +1,1555 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Кинотеатр Москва - Кемерово</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+    <style>
+        /* ===== ПАЛИТРА (бежевая) ===== */
+        :root {
+            --beige-900: #c9b79a;
+            --beige-800: #d6c6ac;
+            --beige-700: #e0d2bc;
+            --beige-600: #e9ddca;
+            --beige-500: #f1e8d8;
+            --beige-400: #f6efe3;
+            --beige-300: #fbf6ee;
+
+            --brown-900: #4a3b2a;
+            --brown-800: #5c4a35;
+            --brown-700: #6f5a42;
+            --brown-600: #836c51;
+
+            --milk-100: #fbf6ee;
+            --milk-200: #f1e8d8;
+            --milk-300: #e0d2bc;
+            --milk-400: #c9b79a;
+
+            --red-700: #9a2318;
+            --red-600: #c22e1e;
+            --red-500: #e03a26;
+            --red-400: #f05a44;
+            --red-300: #f5826f;
+
+            --shadow: #6b5a44;
+        }
+
+        * { box-sizing: border-box; }
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background-color: var(--beige-900);
+            font-family: 'Courier New', Courier, monospace;
+            touch-action: none;
+            color: var(--brown-900);
+        }
+
+        #viewport { width: 100%; height: 100%; position: relative; }
+
+        #map-wrapper {
+            position: absolute; transform-origin: 0 0;
+            width: 2528px; height: 1684px;
+            will-change: transform;
+        }
+
+        #bg-image { width: 100%; height: 100%; display: block; pointer-events: none; }
+
+        .marker {
+            position: absolute; cursor: pointer;
+            transform: translate(-50%, -100%);
+        }
+        .marker img { width: 100%; display: block; pointer-events: none; }
+
+        /* Невидимая кликабельная зона-полигон */
+        .click-zone {
+            position: absolute;
+            cursor: pointer;
+            z-index: 50;
+        }
+        .click-zone svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .marker-bubble {
+            position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+            margin-bottom: 15px; background: var(--beige-700); color: var(--brown-900);
+            padding: 8px 12px; border-radius: 4px; border: 1px solid var(--brown-600);
+            font-size: 14px; white-space: nowrap; pointer-events: none;
+            opacity: 0; transition: opacity 0.3s, margin-bottom 0.3s; z-index: 100;
+            box-shadow: 0 2px 0 var(--shadow);
+        }
+        .marker-bubble.active { opacity: 1; margin-bottom: 25px; }
+
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .ui-element { pointer-events: auto; }
+
+        #floor-switcher { position: absolute; top: 15px; right: 15px; display: flex; flex-direction: column; gap: 10px; }
+        #zoom-controls { position: absolute; bottom: 20px; right: 15px; display: flex; flex-direction: column; gap: 10px; }
+
+        .btn {
+            background: var(--beige-700); color: var(--brown-900);
+            border: 2px solid var(--brown-600);
+            padding: 12px 15px; font-size: 16px; font-weight: bold; cursor: pointer;
+            border-radius: 4px; transition: 0.2s; text-transform: uppercase; font-family: inherit;
+            box-shadow: 0 3px 0 var(--shadow);
+        }
+        .btn:hover { background: var(--beige-600); border-color: var(--brown-800); }
+        .btn.active { background: var(--red-600); border-color: var(--red-400); color: var(--milk-100); }
+        .zoom-btn { font-size: 24px; padding: 10px 18px; line-height: 1; }
+
+        #coords-display {
+            position: absolute; bottom: 20px; left: 20px;
+            background: var(--beige-700); color: var(--brown-800);
+            padding: 10px; font-size: 16px; border-radius: 4px;
+            pointer-events: none; display: none; border: 1px solid var(--brown-600);
+            box-shadow: 0 2px 0 var(--shadow);
+        }
+
+        /* ===== ПИКСЕЛЬНОЕ МОДАЛЬНОЕ ОКНО (тип "modal") ===== */
+        .pixel-modal-overlay {
+            position: fixed; inset: 0;
+            background: var(--beige-900);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+            pointer-events: auto;
+        }
+        .pixel-modal-overlay.active { display: flex; }
+
+        .pixel-modal {
+            font-family: 'Press Start 2P', monospace;
+            background: var(--beige-700);
+            color: var(--brown-900);
+            width: 100%;
+            max-width: 560px;
+            max-height: 88vh;
+            overflow: auto;
+            padding: 32px;
+            text-align: center;
+            position: relative;
+            image-rendering: pixelated;
+            background-image:
+              linear-gradient(rgba(74,59,42,0.05) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(74,59,42,0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            box-shadow:
+              -6px 0 0 0 var(--red-500), 6px 0 0 0 var(--red-500),
+              0 -6px 0 0 var(--red-500), 0 6px 0 0 var(--red-500),
+              -6px -6px 0 0 var(--shadow), 6px -6px 0 0 var(--shadow),
+              -6px 6px 0 0 var(--shadow), 6px 6px 0 0 var(--shadow);
+            animation: windowJitter 0.4s steps(2) 1;
+        }
+        @keyframes windowJitter {
+            0%   { transform: translateY(0) translateX(0); }
+            25%  { transform: translateY(-2px) translateX(2px); }
+            50%  { transform: translateY(2px) translateX(-2px); }
+            75%  { transform: translateY(-1px) translateX(1px); }
+            100% { transform: translateY(0) translateX(0); }
+        }
+
+        .pixel-modal h2 {
+            font-size: 15px;
+            color: var(--red-500);
+            text-shadow: 2px 2px 0 var(--shadow);
+            margin: 0 0 16px;
+            animation: redGlow 2s steps(2) infinite;
+        }
+        @keyframes redGlow {
+            0%, 100% { color: var(--red-500); }
+            50%      { color: var(--red-400); }
+        }
+        .pixel-modal p {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 10px;
+            line-height: 2;
+            color: var(--brown-800);
+            margin: 0 0 18px;
+        }
+
+        .pixel-modal-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            text-align: left;
+            margin-bottom: 12px;
+        }
+        .pixel-modal-text { flex: 1; min-width: 0; }
+        .pixel-modal-text h2 { margin-top: 0; }
+        .pixel-modal-text p  { margin-bottom: 0; }
+
+        .pixel-art {
+            width: 160px;
+            height: 160px;
+            flex-shrink: 0;
+            object-fit: contain;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            animation: float 1.6s steps(2) infinite alternate,
+                       spriteFlash 3.2s steps(2) infinite;
+            filter: drop-shadow(0 6px 0 var(--shadow));
+        }
+        @keyframes float {
+            from { transform: translateY(0); }
+            to   { transform: translateY(-8px); }
+        }
+        @keyframes spriteFlash {
+            0%, 80%, 100% { filter: drop-shadow(0 6px 0 var(--shadow)) brightness(1); }
+            88%           { filter: drop-shadow(0 6px 0 var(--shadow)) brightness(1.15) sepia(0.1); }
+        }
+
+        @media (max-width: 460px) {
+            .pixel-modal-content { flex-direction: column; text-align: center; }
+            .pixel-art { width: 170px; height: 170px; }
+            .pixel-modal { padding: 22px 18px; }
+        }
+
+        .pixel-btn {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 11px;
+            padding: 14px 20px;
+            color: var(--milk-100);
+            background: var(--red-600);
+            border: none;
+            cursor: pointer;
+            position: relative;
+            box-shadow:
+              -4px 0 0 0 var(--shadow), 4px 0 0 0 var(--shadow),
+              0 -4px 0 0 var(--shadow), 0 4px 0 0 var(--shadow),
+              -4px -4px 0 0 var(--shadow), 4px -4px 0 0 var(--shadow),
+              -4px 4px 0 0 var(--shadow), 4px 4px 0 0 var(--shadow);
+            transition: transform 0.05s;
+        }
+        .pixel-btn:hover { background: var(--red-500); }
+        .pixel-btn:active {
+            transform: translate(2px, 2px);
+            box-shadow:
+              -3px 0 0 0 var(--shadow), 3px 0 0 0 var(--shadow),
+              0 -3px 0 0 var(--shadow), 0 3px 0 0 var(--shadow);
+        }
+        .pixel-btn.red { background: var(--red-700); }
+        .pixel-btn.red:hover { background: var(--red-600); }
+
+        .pixel-modal .stars {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .pixel-modal .stars span {
+            position: absolute;
+            width: 3px; height: 3px;
+            background: var(--brown-600);
+            animation: twinkle 1.4s steps(2) infinite;
+        }
+        @keyframes twinkle {
+            0%, 100% { opacity: 0; transform: scale(1); }
+            50%      { opacity: 0.8; transform: scale(1.6); box-shadow: 0 0 0 1px var(--brown-600); }
+        }
+
+        .scanlines {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+              to bottom,
+              rgba(107,90,68,0.10) 0px,
+              rgba(107,90,68,0.10) 2px,
+              transparent 2px,
+              transparent 4px
+            );
+            mix-blend-mode: multiply;
+            opacity: 0.5;
+            animation: scanMove 9s linear infinite;
+        }
+        @keyframes scanMove {
+            0%   { background-position: 0 0; }
+            100% { background-position: 0 40px; }
+        }
+
+        .spark {
+            position: fixed;
+            width: 6px;
+            height: 6px;
+            pointer-events: none;
+            z-index: 9999;
+            image-rendering: pixelated;
+            animation: sparkBurst 0.6s steps(4) forwards;
+        }
+        @keyframes sparkBurst {
+            0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+        }
+
+        .music-toggle {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 5000;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 10px;
+            padding: 10px 14px;
+            background: var(--beige-700);
+            color: var(--brown-800);
+            border: none;
+            cursor: pointer;
+            box-shadow:
+              -4px 0 0 0 var(--shadow), 4px 0 0 0 var(--shadow),
+              0 -4px 0 0 var(--shadow), 0 4px 0 0 var(--shadow),
+              -4px -4px 0 0 var(--shadow), 4px -4px 0 0 var(--shadow),
+              -4px 4px 0 0 var(--shadow), 4px 4px 0 0 var(--shadow);
+        }
+        .music-toggle:hover { color: var(--brown-900); background: var(--beige-600); }
+        .music-toggle.paused { color: var(--red-500); }
+
+        /* =========================================================
+           ===== PIXEL SCENE MODAL (окно с рычагами) ===============
+           ========================================================= */
+        .pixel-scene-overlay {
+            position: fixed; inset: 0;
+            background: var(--beige-900);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1100;
+            padding: 20px;
+            pointer-events: auto;
+        }
+        .pixel-scene-overlay.active { display: flex; }
+
+        .pixel-scene-modal {
+            font-family: 'Press Start 2P', monospace;
+            background: var(--beige-700);
+            color: var(--brown-900);
+            width: 100%;
+            max-width: 560px;
+            max-height: 92vh;
+            overflow: auto;
+            padding: 36px 26px 26px;
+            text-align: center;
+            position: relative;
+            image-rendering: pixelated;
+            background-image:
+              linear-gradient(rgba(74,59,42,0.06) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(74,59,42,0.06) 1px, transparent 1px);
+            background-size: 20px 20px;
+            box-shadow:
+              -6px 0 0 0 var(--brown-600), 6px 0 0 0 var(--brown-600),
+              0 -6px 0 0 var(--brown-600), 0 6px 0 0 var(--brown-600),
+              -6px -6px 0 0 var(--shadow), 6px -6px 0 0 var(--shadow),
+              -6px 6px 0 0 var(--shadow), 6px 6px 0 0 var(--shadow);
+            animation: windowJitter 0.4s steps(2) 1;
+        }
+
+        .pixel-scene-modal h2 {
+            font-size: 14px;
+            color: var(--red-500);
+            text-shadow: 2px 2px 0 var(--shadow);
+            margin: 0 0 16px;
+            animation: redGlow 2s steps(2) infinite;
+        }
+        .pixel-scene-modal p {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 9px;
+            line-height: 1.9;
+            color: var(--brown-800);
+            margin: 14px 0 18px;
+        }
+
+        .pixel-scene-close-x {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 34px;
+            height: 34px;
+            background: var(--red-600);
+            color: var(--milk-100);
+            font-family: 'Press Start 2P', monospace;
+            font-size: 14px;
+            line-height: 1;
+            border: none;
+            cursor: pointer;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow:
+              -3px 0 0 0 var(--shadow), 3px 0 0 0 var(--shadow),
+              0 -3px 0 0 var(--shadow), 0 3px 0 0 var(--shadow),
+              -3px -3px 0 0 var(--shadow), 3px -3px 0 0 var(--shadow),
+              -3px 3px 0 0 var(--shadow), 3px 3px 0 0 var(--shadow);
+            transition: transform 0.05s;
+        }
+        .pixel-scene-close-x:hover { background: var(--red-500); }
+        .pixel-scene-close-x:active {
+            transform: translate(1px, 1px);
+            box-shadow:
+              -2px 0 0 0 var(--shadow), 2px 0 0 0 var(--shadow),
+              0 -2px 0 0 var(--shadow), 0 2px 0 0 var(--shadow);
+        }
+
+        .pixel-scene-frame {
+            width: 85%;
+            max-width: 430px;
+            aspect-ratio: 16 / 9;
+            margin: 0 auto;
+            background: var(--beige-800);
+            box-shadow:
+              -3px 0 0 0 var(--shadow), 3px 0 0 0 var(--shadow),
+              0 -3px 0 0 var(--shadow), 0 3px 0 0 var(--shadow);
+            overflow: hidden;
+            position: relative;
+            background-image:
+              linear-gradient(45deg, var(--beige-600) 25%, transparent 25%),
+              linear-gradient(-45deg, var(--beige-600) 25%, transparent 25%),
+              linear-gradient(45deg, transparent 75%, var(--beige-600) 75%),
+              linear-gradient(-45deg, transparent 75%, var(--beige-600) 75%);
+            background-size: 16px 16px;
+            background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+        }
+        .pixel-scene-art {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            animation: float 2.8s steps(2) infinite alternate;
+            filter: drop-shadow(0 4px 0 rgba(107,90,68,0.4));
+            background: var(--beige-800);
+        }
+        .pixel-scene-frame.pulse {
+            animation: framePulse 0.55s steps(3) 1;
+        }
+        @keyframes framePulse {
+            0%   { box-shadow: -3px 0 0 0 var(--shadow), 3px 0 0 0 var(--shadow), 0 -3px 0 0 var(--shadow), 0 3px 0 0 var(--shadow); }
+            50%  { box-shadow: -3px 0 0 0 var(--brown-600), 3px 0 0 0 var(--brown-600), 0 -3px 0 0 var(--brown-600), 0 3px 0 0 var(--brown-600); }
+            100% { box-shadow: -3px 0 0 0 var(--shadow), 3px 0 0 0 var(--shadow), 0 -3px 0 0 var(--shadow), 0 3px 0 0 var(--shadow); }
+        }
+
+        /* --- Единственная оставшаяся анимация: сетка квадратов --- */
+        .pixel-grid {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(5, 1fr);
+            z-index: 6;
+            pointer-events: none;
+        }
+        .pixel-grid .cell {
+            background: var(--beige-600);
+            box-shadow: inset 0 0 0 1px var(--beige-700);
+            animation: pixelBlock 0.55s steps(3) forwards;
+        }
+        @keyframes pixelBlock {
+            0%   { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(0.6); }
+        }
+
+        .pixel-scene-modal .stars {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .pixel-scene-modal .stars span {
+            position: absolute;
+            width: 3px; height: 3px;
+            background: var(--brown-600);
+            animation: twinkle 1.4s steps(2) infinite;
+        }
+
+        .pixel-scene-btn-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 14px;
+            margin-top: 22px;
+            flex-wrap: wrap;
+        }
+        .pixel-btn.green { background: var(--brown-700); }
+        .pixel-btn.green:hover { background: var(--brown-600); }
+        .pixel-btn.blue { background: var(--brown-800); }
+        .pixel-btn.blue:hover { background: var(--brown-700); }
+        .pixel-btn.yellow { background: var(--beige-500); color: var(--brown-900); }
+        .pixel-btn.yellow:hover { background: var(--beige-400); }
+        .pixel-btn.purple { background: var(--red-600); }
+        .pixel-btn.purple:hover { background: var(--red-500); }
+
+        @media (max-width: 460px) {
+            .pixel-scene-modal { padding: 26px 16px 20px; }
+            .pixel-scene-close-x { width: 28px; height: 28px; font-size: 12px; }
+        }
+
+        /* =========================================================
+           ===== PIXEL LOADER (полноэкранная загрузка) ============
+           ========================================================= */
+        .pixel-loader-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--beige-900);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20000;
+            padding: 0 6vw;
+            pointer-events: auto;
+            transition: opacity 0.5s steps(3);
+        }
+        .pixel-loader-overlay.hidden { display: none; }
+        .pixel-loader-overlay.fade-out { opacity: 0; }
+
+        .pixel-loader-bar {
+            position: relative;
+            width: 100%;
+            height: 32px;
+            background: var(--beige-800);
+            box-shadow:
+              inset 0 0 0 2px var(--shadow),
+              inset 0 0 0 4px var(--beige-700);
+            overflow: hidden;
+        }
+
+        .pixel-loader-fill {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            bottom: 4px;
+            width: 0%;
+            background: var(--red-500);
+            box-shadow:
+              0 0 0 1px var(--shadow),
+              0 0 10px rgba(224,58,38,0.45);
+            transition: width 0.12s steps(2);
+            image-rendering: pixelated;
+        }
+        .pixel-loader-fill::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image:
+              repeating-linear-gradient(
+                to right,
+                transparent 0px,
+                transparent 4px,
+                rgba(107,90,68,0.3) 4px,
+                rgba(107,90,68,0.3) 6px
+              );
+            animation: loaderPixels 0.6s steps(4) infinite;
+        }
+        @keyframes loaderPixels {
+            0%   { background-position: 0 0; }
+            100% { background-position: 12px 0; }
+        }
+
+        .pixel-loader-shatter {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 20001;
+            overflow: hidden;
+        }
+        .pixel-loader-shatter i {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            background: var(--red-500);
+            box-shadow: 0 0 0 2px var(--shadow);
+            animation: loaderShatter 0.7s steps(5) forwards;
+        }
+        @keyframes loaderShatter {
+            0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+        }
+
+        /* =========================================================
+           ===== СТАРТОВЫЙ ЭКРАН (после загрузки) =================
+           ========================================================= */
+        #start-screen {
+            position: fixed;
+            inset: 0;
+            background: var(--beige-900);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 15000;
+            pointer-events: auto;
+            gap: 6vh;
+        }
+        #start-screen.visible { display: flex; }
+
+        #start-title {
+            font-family: 'Press Start 2P', monospace;
+            font-size: clamp(28px, 8vw, 72px);
+            color: var(--red-500);
+            text-shadow:
+              3px 3px 0 var(--shadow),
+              -2px -2px 0 var(--beige-700);
+            letter-spacing: 4px;
+            text-align: center;
+            margin: 0;
+            animation: titlePulse 2.4s steps(2) infinite;
+        }
+        @keyframes titlePulse {
+            0%, 100% { color: var(--red-500); }
+            50%      { color: var(--red-400); }
+        }
+
+        #start-visit-btn {
+            font-family: 'Press Start 2P', monospace;
+            font-size: clamp(12px, 2.4vw, 18px);
+            padding: 18px 30px;
+            color: var(--milk-100);
+            background: var(--red-600);
+            border: none;
+            cursor: pointer;
+            position: relative;
+            letter-spacing: 2px;
+            box-shadow:
+              -5px 0 0 0 var(--shadow), 5px 0 0 0 var(--shadow),
+              0 -5px 0 0 var(--shadow), 0 5px 0 0 var(--shadow),
+              -5px -5px 0 0 var(--shadow), 5px -5px 0 0 var(--shadow),
+              -5px 5px 0 0 var(--shadow), 5px 5px 0 0 var(--shadow);
+            transition: transform 0.05s, background 0.15s;
+        }
+        #start-visit-btn:hover { background: var(--red-500); }
+        #start-visit-btn:active {
+            transform: translate(3px, 3px);
+            box-shadow:
+              -3px 0 0 0 var(--shadow), 3px 0 0 0 var(--shadow),
+              0 -3px 0 0 var(--shadow), 0 3px 0 0 var(--shadow);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================
+         👇👇👇  ВАШ ТРЕК  👇👇👇
+         Положите файл рядом с index.html (например, assets/music.mp3)
+         и укажите путь в src. Можно указать несколько <source>
+         для разных форматов — браузер выберет первый поддерживаемый.
+         ============================================================ -->
+    <audio id="bg-music" loop preload="auto">
+        <source src="assets/audio/фон.mp3" type="audio/mpeg">
+    </audio>
+    <!-- ============================================================ -->
+
+    <!-- ===== PIXEL LOADER (полноэкранный, только ползунок) ===== -->
+    <div class="pixel-loader-overlay" id="pixel-loader-overlay">
+        <div class="pixel-loader-bar">
+            <div class="pixel-loader-fill" id="pixel-loader-fill"></div>
+        </div>
+    </div>
+
+    <!-- ===== СТАРТОВЫЙ ЭКРАН (появляется после загрузки) ===== -->
+    <div id="start-screen">
+        <h1 id="start-title">МОСКВА</h1>
+        <button id="start-visit-btn">ПОСЕТИТЬ</button>
+    </div>
+
+    <div id="viewport">
+        <div id="map-wrapper">
+            <img id="bg-image" src="assets/bg_2.jpg" alt="Карта этажа">
+            <div id="markers-container"></div>
+        </div>
+
+        <div id="ui-layer">
+            <div id="floor-switcher" class="ui-element">
+                <button class="btn active" onclick="switchFloor(1)">1 Этаж</button>
+                <button class="btn" onclick="switchFloor(2)">2 Этаж</button>
+            </div>
+
+            <div id="zoom-controls" class="ui-element">
+                <button class="btn zoom-btn" onclick="zoomInOut(0.2)">+</button>
+                <button class="btn zoom-btn" onclick="zoomInOut(-0.2)">−</button>
+            </div>
+
+            <div id="coords-display"></div>
+        </div>
+    </div>
+
+    <button class="music-toggle" id="musicToggle">♪ Music: OFF</button>
+
+    <!-- ===== ПИКСЕЛЬНОЕ МОДАЛЬНОЕ ОКНО (тип "modal") ===== -->
+    <div class="pixel-modal-overlay" id="pixel-modal">
+        <div class="pixel-modal">
+            <div class="scanlines"></div>
+            <div class="stars" id="pixel-modal-stars"></div>
+
+            <div class="pixel-modal-content">
+                <img class="pixel-art" id="pixel-modal-img" alt="pixel sprite" src="">
+                <div class="pixel-modal-text">
+                    <h2 id="pixel-modal-title"></h2>
+                    <div id="pixel-modal-body"></div>
+                </div>
+            </div>
+
+            <button class="pixel-btn red" id="pixel-modal-close" style="margin-top: 22px;">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- ===== PIXEL SCENE MODAL С РЫЧАГАМИ ===== -->
+    <div class="pixel-scene-overlay" id="pixel-scene-modal">
+        <div class="pixel-scene-modal">
+            <div class="scanlines"></div>
+            <div class="stars" id="pixel-scene-stars"></div>
+
+            <button class="pixel-scene-close-x" id="pixel-scene-close-x" aria-label="Закрыть">✕</button>
+
+            <h2 id="pixel-scene-title">PIXEL SCENE</h2>
+
+            <div class="pixel-scene-frame" id="pixel-scene-frame">
+                <img
+                    class="pixel-scene-art"
+                    id="pixel-scene-art"
+                    alt="pixel scene"
+                    src="assets/img/1.jpg"
+                >
+            </div>
+
+            <p id="pixel-scene-text">
+                Нажми на рычаг — картинка сменится пиксельной анимацией.
+            </p>
+
+            <!-- Кнопки-рычаги генерируются динамически из JS -->
+            <div class="pixel-scene-btn-row"></div>
+        </div>
+    </div>
+
+    <script>
+        /* ============================================================
+           КОНСТАНТЫ КАРТИНОК
+           ============================================================ */
+        const PIXEL_SCENE_PERS_FRAMES = [
+            'assets/pers/man_1.png',
+            'assets/pers/man_2.png',
+            'assets/pers/man_3.png',
+            'assets/pers/man_4.png'
+        ];
+
+        const PIXEL_SCENE_ROBOT_SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32' shape-rendering='crispEdges'><rect width='32' height='32' fill='%23d6c6ac'/><rect x='15' y='3' width='2' height='3' fill='%23836c51'/><rect x='14' y='2' width='1' height='1' fill='%234a3b2a'/><rect x='17' y='2' width='1' height='1' fill='%234a3b2a'/><rect x='14' y='1' width='1' height='1' fill='%234a3b2a'/><rect x='17' y='1' width='1' height='1' fill='%234a3b2a'/><rect x='9' y='6' width='14' height='1' fill='%23836c51'/><rect x='8' y='7' width='16' height='2' fill='%236f5a42'/><rect x='8' y='9' width='16' height='6' fill='%236f5a42'/><rect x='10' y='10' width='4' height='3' fill='%23fbf6ee'/><rect x='18' y='10' width='4' height='3' fill='%23fbf6ee'/><rect x='11' y='10' width='1' height='1' fill='%234a3b2a'/><rect x='19' y='10' width='1' height='1' fill='%234a3b2a'/><rect x='12' y='14' width='8' height='1' fill='%23836c51'/><rect x='13' y='15' width='6' height='1' fill='%23836c51'/><rect x='7' y='9' width='1' height='6' fill='%23836c51'/><rect x='24' y='9' width='1' height='6' fill='%23836c51'/><rect x='7' y='15' width='1' height='2' fill='%23836c51'/><rect x='24' y='15' width='1' height='2' fill='%23836c51'/><rect x='11' y='17' width='10' height='2' fill='%236f5a42'/><rect x='10' y='19' width='12' height='5' fill='%236f5a42'/><rect x='13' y='20' width='6' height='3' fill='%23fbf6ee'/><rect x='14' y='21' width='4' height='1' fill='%23e03a26'/><rect x='9' y='19' width='1' height='5' fill='%23836c51'/><rect x='22' y='19' width='1' height='5' fill='%23836c51'/><rect x='11' y='24' width='3' height='2' fill='%23836c51'/><rect x='18' y='24' width='3' height='2' fill='%23836c51'/><rect x='11' y='26' width='3' height='1' fill='%236f5a42'/><rect x='18' y='26' width='3' height='1' fill='%236f5a42'/></svg>";
+
+        /*
+        ============================================================
+        КАТЕГОРИИ ПРЕДМЕТОВ:
+        1) type: 'tooltip'  — обычный предмет. Пузырёк с текстом.
+        2) type: 'modal'    — предмет с ПИКСЕЛЬНЫМ модальным окном.
+        3) type: 'zone'     — невидимая кликабельная зона-полигон,
+                              открывает ОКНО СЦЕНЫ С РЫЧАГАМИ.
+        ============================================================
+        */
+        const elementsData = [
+            /* ===== ЗОНА-ПОЛИГОН → ОКНО СЦЕНЫ С РЫЧАГАМИ ===== */
+            {
+                type: 'zone',
+                floor: 2,
+                points: [
+                    [2092, 698],
+                    [2298, 685],
+                    [2315, 951],
+                    [2075, 966]
+                ],
+                title: "СЦЕНА-ТРАНСФОРМЕР",
+                text: "Сцена, которая подойдет под любое мероприятие.",
+                sceneImages: [
+                    'assets/img/1.jpg',
+                    'assets/img/2.jpg',
+                    'assets/img/3.jpg'
+                ]
+            },
+
+            {
+                type: 'tooltip',
+                floor: 1,
+                x: 1066,
+                y: 864,
+                width: 50,
+                frames: [
+                    'assets/pers/man_1.png',
+                    'assets/pers/man_2.png',
+                    'assets/pers/man_3.png',
+                    'assets/pers/man_4.png'
+                ],
+                text: "Привет! Я здесь в первый раз."
+            },
+
+            {
+                type: 'tooltip',
+                floor: 1,
+                x: 1501,
+                y: 864,
+                width: 100,
+                frames: [
+                    'Новая папка/бариста 2.png',
+                    'Новая папка/бариста 3.png',
+                    'Новая папка/бариста 4.png'
+                ],
+                text: "Здесь вы можете попробовать вкусный кофе."
+            },
+
+            {
+                type: 'tooltip',
+                floor: 1,
+                x: 1006,
+                y: 663,
+                width: 80,
+                frames: [
+                    'Новая папка/гардеробщик_2.png',
+                    'Новая папка/гардеробщик_3.png',
+                    'Новая папка/гардеробщик_4.png'
+                ],
+                text: "Не забудьте сдать свою одежду."
+            }
+        ];
+
+        const viewport = document.getElementById('viewport');
+        const mapWrapper = document.getElementById('map-wrapper');
+        const bgImage = document.getElementById('bg-image');
+        const markersContainer = document.getElementById('markers-container');
+
+        const mapWidth = 2528;
+        const mapHeight = 1684;
+
+        let currentFloor = 1;
+        let animationIntervals = [];
+
+        let scale = Math.max(window.innerWidth / mapWidth, window.innerHeight / mapHeight);
+        let posX = (window.innerWidth - mapWidth * scale) / 2;
+        let posY = (window.innerHeight - mapHeight * scale) / 2;
+
+        function updateMapTransform() {
+            const minX = window.innerWidth - (mapWidth * scale);
+            const minY = window.innerHeight - (mapHeight * scale);
+
+            posX = Math.min(0, Math.max(posX, minX));
+            posY = Math.min(0, Math.max(posY, minY));
+
+            mapWrapper.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
+        }
+
+        function switchFloor(floor) {
+            currentFloor = floor;
+
+            document.querySelectorAll('#floor-switcher .btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`#floor-switcher .btn:nth-child(${floor})`).classList.add('active');
+
+            bgImage.src = floor === 1 ? 'assets/bg_1.jpg' : 'assets/bg_2.jpg';
+
+            renderMarkers();
+        }
+
+        /* ============================================================
+           АУДИО
+           ============================================================ */
+        let audioCtx = null;
+
+        function getAudioCtx() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return audioCtx;
+        }
+
+        function playBeep(freq = 440, duration = 0.08, type = 'square', volume = 0.08) {
+            const ctx = getAudioCtx();
+            if (ctx.state === 'suspended') ctx.resume();
+
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(freq * 0.7, ctx.currentTime + duration);
+
+            gain.gain.setValueAtTime(volume, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + duration);
+        }
+
+        function playModalSound() {
+            playBeep(587, 0.06, 'triangle', 0.06);
+            setTimeout(() => playBeep(784, 0.06, 'triangle', 0.06), 80);
+            setTimeout(() => playBeep(932, 0.1, 'triangle', 0.06), 160);
+        }
+        function playCloseSound() {
+            playBeep(698, 0.06, 'triangle', 0.06);
+            setTimeout(() => playBeep(466, 0.1, 'triangle', 0.06), 80);
+        }
+        function playSwitchSound() {
+            playBeep(294, 0.04, 'triangle', 0.05);
+            setTimeout(() => playBeep(587, 0.06, 'triangle', 0.05), 45);
+            setTimeout(() => playBeep(880, 0.05, 'triangle', 0.05), 100);
+        }
+        function playLoaderFinishSound() {
+            playBeep(466, 0.07, 'triangle', 0.05);
+            setTimeout(() => playBeep(587, 0.07, 'triangle', 0.05), 80);
+            setTimeout(() => playBeep(698, 0.09, 'triangle', 0.05), 160);
+            setTimeout(() => playBeep(932, 0.13, 'triangle', 0.05), 250);
+        }
+        function playVisitSound() {
+            playBeep(392, 0.07, 'triangle', 0.06);
+            setTimeout(() => playBeep(523, 0.07, 'triangle', 0.06), 90);
+            setTimeout(() => playBeep(659, 0.1, 'triangle', 0.06), 180);
+            setTimeout(() => playBeep(784, 0.14, 'triangle', 0.06), 280);
+        }
+
+        /* ============================================================
+           ФОНОВАЯ МУЗЫКА (обычный аудиофайл из <audio id="bg-music">)
+           ============================================================ */
+        const bgMusic = document.getElementById('bg-music');
+        bgMusic.volume = 0.1;
+
+        let musicPlaying = false;
+
+        function startMusic() {
+            if (musicPlaying) return;
+            const p = bgMusic.play();
+            if (p && p.catch) {
+                p.catch(err => console.warn('Autoplay blocked:', err));
+            }
+            musicPlaying = true;
+        }
+
+        function stopMusic() {
+            bgMusic.pause();
+            musicPlaying = false;
+        }
+
+        const musicToggle = document.getElementById('musicToggle');
+
+        musicToggle.addEventListener('click', () => {
+            if (musicPlaying) {
+                stopMusic();
+                musicToggle.textContent = '♪ Music: OFF';
+                musicToggle.classList.add('paused');
+            } else {
+                startMusic();
+                musicToggle.textContent = '♪ Music: ON';
+                musicToggle.classList.remove('paused');
+            }
+        });
+
+        let musicAutoStarted = false;
+        function autoStartMusicOnce() {
+            if (musicAutoStarted) return;
+            musicAutoStarted = true;
+            startMusic();
+            musicToggle.textContent = '♪ Music: ON';
+            musicToggle.classList.remove('paused');
+            document.removeEventListener('click', autoStartMusicOnce);
+            document.removeEventListener('keydown', autoStartMusicOnce);
+        }
+        document.addEventListener('click', autoStartMusicOnce);
+        document.addEventListener('keydown', autoStartMusicOnce);
+
+        /* ============================================================
+           ПИКСЕЛЬНЫЕ ИСКРЫ
+           ============================================================ */
+        function burstSparks(x, y) {
+            const colors = ['#fbf6ee', '#c9b79a', '#e03a26', '#e9ddca', '#836c51'];
+            const count = 9;
+            for (let i = 0; i < count; i++) {
+                const s = document.createElement('div');
+                s.className = 'spark';
+                s.style.left = x + 'px';
+                s.style.top  = y + 'px';
+                s.style.background = colors[Math.floor(Math.random() * colors.length)];
+
+                const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+                const dist  = 26 + Math.random() * 26;
+                s.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
+                s.style.setProperty('--dy', Math.sin(angle) * dist + 'px');
+
+                document.body.appendChild(s);
+                setTimeout(() => s.remove(), 650);
+            }
+        }
+
+        /* ============================================================
+           PIXEL LOADER (полноэкранная загрузка, только ползунок)
+           ============================================================ */
+        const loaderOverlay = document.getElementById('pixel-loader-overlay');
+        const loaderFill    = document.getElementById('pixel-loader-fill');
+        const startScreen   = document.getElementById('start-screen');
+
+        let loaderProgress = 0;
+        let loaderTimer = null;
+        let loaderClosed = false;
+
+        function setPixelLoaderProgress(p) {
+            loaderProgress = Math.max(0, Math.min(100, p));
+            loaderFill.style.width = loaderProgress + '%';
+        }
+
+        function shatterLoader() {
+            const rect = loaderOverlay.getBoundingClientRect();
+            const shatter = document.createElement('div');
+            shatter.className = 'pixel-loader-shatter';
+            const colors = ['#e03a26', '#c9b79a', '#fbf6ee', '#d6c6ac', '#f05a44', '#e9ddca'];
+            const count = 34;
+            for (let i = 0; i < count; i++) {
+                const p = document.createElement('i');
+                p.style.left = (rect.left + Math.random() * rect.width) + 'px';
+                p.style.top  = (rect.top  + Math.random() * rect.height) + 'px';
+                p.style.background = colors[Math.floor(Math.random() * colors.length)];
+                const angle = Math.random() * Math.PI * 2;
+                const dist  = 50 + Math.random() * 140;
+                p.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
+                p.style.setProperty('--dy', Math.sin(angle) * dist + 'px');
+                p.style.animationDelay = (Math.random() * 0.12) + 's';
+                shatter.appendChild(p);
+            }
+            document.body.appendChild(shatter);
+            setTimeout(() => shatter.remove(), 950);
+        }
+
+        function finishPixelLoader() {
+            if (loaderClosed) return;
+            loaderClosed = true;
+
+            playLoaderFinishSound();
+            shatterLoader();
+
+            loaderOverlay.classList.add('fade-out');
+            setTimeout(() => {
+                loaderOverlay.classList.add('hidden');
+                loaderOverlay.classList.remove('fade-out');
+
+                startScreen.classList.add('visible');
+                document.body.style.pointerEvents = '';
+            }, 500);
+        }
+
+        function startPixelLoader() {
+            document.body.style.pointerEvents = 'none';
+            loaderOverlay.style.pointerEvents = 'auto';
+
+            loaderProgress = 0;
+            setPixelLoaderProgress(0);
+
+            const totalTime = 2400;
+            const stepTime = 40;
+            const steps = totalTime / stepTime;
+            let currentStep = 0;
+
+            loaderTimer = setInterval(() => {
+                currentStep++;
+
+                const t = currentStep / steps;
+                let eased;
+                if (t < 0.7) {
+                    eased = t * 1.3;
+                } else {
+                    eased = 0.91 + (t - 0.7) * 0.3;
+                }
+                const p = Math.min(100, eased * 100);
+                setPixelLoaderProgress(p);
+
+                if (currentStep >= steps) {
+                    clearInterval(loaderTimer);
+                    loaderTimer = null;
+                    setPixelLoaderProgress(100);
+                    setTimeout(finishPixelLoader, 380);
+                }
+            }, stepTime);
+        }
+
+        startPixelLoader();
+
+        /* ===== Кнопка ПОСЕТИТЬ ===== */
+        document.getElementById('start-visit-btn').addEventListener('click', (e) => {
+            burstSparks(e.clientX, e.clientY);
+            playVisitSound();
+            startScreen.classList.remove('visible');
+            startScreen.style.display = 'none';
+            if (!musicPlaying) {
+                startMusic();
+                musicToggle.textContent = '♪ Music: ON';
+                musicToggle.classList.remove('paused');
+            }
+        });
+
+        /* ============================================================
+           ПИКСЕЛЬНОЕ МОДАЛЬНОЕ ОКНО (тип "modal")
+           ============================================================ */
+        const DEFAULT_PIXEL_SPRITE =
+          "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' shape-rendering='crispEdges'><rect width='16' height='16' fill='%23c9b79a'/><rect x='6' y='2' width='4' height='1' fill='%234a3b2a'/><rect x='5' y='3' width='1' height='1' fill='%234a3b2a'/><rect x='10' y='3' width='1' height='1' fill='%234a3b2a'/><rect x='4' y='4' width='8' height='1' fill='%234a3b2a'/><rect x='3' y='5' width='10' height='2' fill='%234a3b2a'/><rect x='3' y='7' width='2' height='1' fill='%234a3b2a'/><rect x='11' y='7' width='2' height='1' fill='%234a3b2a'/><rect x='5' y='7' width='2' height='1' fill='%23fbf6ee'/><rect x='9' y='7' width='2' height='1' fill='%23fbf6ee'/><rect x='4' y='8' width='8' height='1' fill='%234a3b2a'/><rect x='5' y='9' width='6' height='1' fill='%23c22e1e'/><rect x='3' y='10' width='10' height='1' fill='%23c22e1e'/><rect x='2' y='11' width='12' height='2' fill='%23c22e1e'/><rect x='1' y='13' width='14' height='1' fill='%236f5a42'/><rect x='2' y='14' width='12' height='1' fill='%236f5a42'/><rect x='4' y='15' width='8' height='1' fill='%236f5a42'/></svg>";
+
+        const pixelModal = document.getElementById('pixel-modal');
+        const pixelModalTitle = document.getElementById('pixel-modal-title');
+        const pixelModalBody  = document.getElementById('pixel-modal-body');
+        const pixelModalImg   = document.getElementById('pixel-modal-img');
+        const pixelModalClose = document.getElementById('pixel-modal-close');
+        const pixelModalStars = document.getElementById('pixel-modal-stars');
+
+        for (let i = 0; i < 14; i++) {
+            const s = document.createElement('span');
+            s.style.left = Math.random() * 100 + '%';
+            s.style.top  = Math.random() * 100 + '%';
+            s.style.animationDelay = (Math.random() * 1.2) + 's';
+            s.style.animationDuration = (1.1 + Math.random() * 1.2) + 's';
+            pixelModalStars.appendChild(s);
+        }
+
+        let pixelModalInterval = null;
+
+        function openPixelModal(data) {
+            pixelModalTitle.textContent = data.title || 'ИНФОРМАЦИЯ';
+
+            let html = data.html || '';
+            if (!html) {
+                const txt = data.text || '';
+                html = txt ? `<p>${txt}</p>` : '';
+            }
+            pixelModalBody.innerHTML = html;
+
+            if (pixelModalInterval) {
+                clearInterval(pixelModalInterval);
+                pixelModalInterval = null;
+            }
+
+            if (data.frames && data.frames.length) {
+                let frameIdx = 0;
+                pixelModalImg.src = data.frames[0];
+                pixelModalInterval = setInterval(() => {
+                    if (!pixelModal.classList.contains('active')) return;
+                    frameIdx = (frameIdx + 1) % data.frames.length;
+                    pixelModalImg.src = data.frames[frameIdx];
+                }, 280);
+            } else {
+                pixelModalImg.src = data.image || DEFAULT_PIXEL_SPRITE;
+            }
+
+            pixelModalImg.style.display = '';
+            pixelModal.classList.add('active');
+            playModalSound();
+        }
+
+        function closePixelModal() {
+            pixelModal.classList.remove('active');
+            if (pixelModalInterval) {
+                clearInterval(pixelModalInterval);
+                pixelModalInterval = null;
+            }
+            playCloseSound();
+        }
+
+        pixelModalClose.addEventListener('click', (e) => {
+            burstSparks(e.clientX, e.clientY);
+            closePixelModal();
+        });
+        pixelModal.addEventListener('click', (e) => {
+            if (e.target.id === 'pixel-modal') closePixelModal();
+        });
+
+        /* ============================================================
+           PIXEL SCENE MODAL (окно с рычагами)
+           Открывается из зоны-полигона (type: 'zone').
+           ============================================================ */
+
+        /* 👇 Дефолтный набор — ваши картинки сцены (без человечка) */
+        const PIXEL_SCENE_DEFAULT_IMAGES = [
+            'assets/img/1.jpg',
+            'assets/img/2.jpg',
+            'assets/img/3.jpg'
+        ];
+
+        let pixelSceneImages = PIXEL_SCENE_DEFAULT_IMAGES.slice();
+
+        let pixelSceneIsAnimating = false;
+
+        const pixelSceneOverlay = document.getElementById('pixel-scene-modal');
+        const pixelSceneArt     = document.getElementById('pixel-scene-art');
+        const pixelSceneFrame   = document.getElementById('pixel-scene-frame');
+        const pixelSceneClose   = document.getElementById('pixel-scene-close-x');
+        const pixelSceneTitle   = document.getElementById('pixel-scene-title');
+        const pixelSceneText    = document.getElementById('pixel-scene-text');
+        const pixelSceneStars   = document.getElementById('pixel-scene-stars');
+        const pixelSceneBtnRow  = document.querySelector('.pixel-scene-btn-row');
+
+        for (let i = 0; i < 14; i++) {
+            const s = document.createElement('span');
+            s.style.left = Math.random() * 100 + '%';
+            s.style.top  = Math.random() * 100 + '%';
+            s.style.animationDelay = (Math.random() * 1.2) + 's';
+            s.style.animationDuration = (1.1 + Math.random() * 1.2) + 's';
+            pixelSceneStars.appendChild(s);
+        }
+
+        /* 👇 Больше не запускает человечка — просто ставит первый кадр */
+        function startPixelScenePersAnim() {
+            const first = pixelSceneImages[0] || PIXEL_SCENE_DEFAULT_IMAGES[0];
+            if (Array.isArray(first)) {
+                pixelSceneArt.src = first[0];
+            } else {
+                pixelSceneArt.src = first;
+            }
+        }
+
+        /* Динамический рендер кнопок-рычагов под количество картинок */
+        const SCENE_BTN_CLASSES = ['purple', 'yellow', 'blue', 'green', 'red'];
+
+        function renderSceneButtons(count) {
+            pixelSceneBtnRow.innerHTML = '';
+
+            for (let i = 0; i < count; i++) {
+                const btn = document.createElement('button');
+                btn.className = `pixel-btn ${SCENE_BTN_CLASSES[i % SCENE_BTN_CLASSES.length]}`;
+                btn.dataset.img = String(i);
+                btn.textContent = `Рычаг ${i + 1}`;
+                pixelSceneBtnRow.appendChild(btn);
+            }
+        }
+
+        function handleSceneLeverClick(btn) {
+            if (pixelSceneIsAnimating) return;
+            pixelSceneIsAnimating = true;
+
+            const idx = parseInt(btn.dataset.img, 10);
+            playSwitchSound();
+            const rect = btn.getBoundingClientRect();
+            burstSparks(rect.left + rect.width / 2, rect.top + rect.height / 2);
+
+            pixelSceneFrame.classList.remove('pulse');
+            void pixelSceneFrame.offsetWidth;
+            pixelSceneFrame.classList.add('pulse');
+
+            /* Одна фиксированная анимация — сетка квадратов */
+            const animFn = pixelSceneAnimations[0];
+
+            const newSrc = pixelSceneImages[idx] || pixelSceneImages[0];
+            animFn(pixelSceneFrame, newSrc, () => {
+                pixelSceneIsAnimating = false;
+                pixelSceneFrame.classList.remove('pulse');
+            });
+        }
+
+        /* Делегирование клика по контейнеру кнопок */
+        pixelSceneBtnRow.addEventListener('click', (e) => {
+            const btn = e.target.closest('.pixel-btn');
+            if (!btn || !pixelSceneBtnRow.contains(btn)) return;
+            handleSceneLeverClick(btn);
+        });
+
+        function openPixelSceneModal(data) {
+            pixelSceneTitle.textContent = data.title || 'PIXEL SCENE';
+            if (data.text) pixelSceneText.textContent = data.text;
+
+            /* Подставляем кастомные картинки рычагов, если переданы */
+            pixelSceneImages = data.sceneImages || PIXEL_SCENE_DEFAULT_IMAGES;
+
+            /* Перестраиваем кнопки-рычаги под количество картинок */
+            renderSceneButtons(pixelSceneImages.length);
+
+            /* 👇 Сразу показываем первый кадр (без анимации) */
+            startPixelScenePersAnim();
+
+            pixelSceneFrame.classList.remove('pulse');
+            pixelSceneOverlay.classList.add('active');
+            playModalSound();
+        }
+
+        function closePixelSceneModal() {
+            pixelSceneOverlay.classList.remove('active');
+            playCloseSound();
+        }
+
+        pixelSceneClose.addEventListener('click', (e) => {
+            burstSparks(e.clientX, e.clientY);
+            closePixelSceneModal();
+        });
+        pixelSceneOverlay.addEventListener('click', (e) => {
+            if (e.target.id === 'pixel-scene-modal') closePixelSceneModal();
+        });
+
+        /* --- Одна пиксельная анимация: сетка квадратов --- */
+        function pixelSceneAnimGrid(wrap, newSrc, done) {
+            const grid = document.createElement('div');
+            grid.className = 'pixel-grid';
+            const COLS = 8, ROWS = 5;
+            for (let i = 0; i < COLS * ROWS; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.style.animationDelay = (Math.random() * 0.15) + 's';
+                grid.appendChild(cell);
+            }
+            wrap.appendChild(grid);
+            setTimeout(() => { setPixelSceneImage(newSrc); }, 220);
+            setTimeout(() => { grid.remove(); if (done) done(); }, 580);
+        }
+
+        const pixelSceneAnimations = [
+            pixelSceneAnimGrid
+        ];
+
+        function setPixelSceneImage(src) {
+            if (Array.isArray(src)) {
+                pixelSceneArt.src = src[0];
+            } else {
+                pixelSceneArt.src = src;
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closePixelModal();
+                closePixelSceneModal();
+            }
+        });
+
+        /* ============================================================
+           РЕНДЕР МАРКЕРОВ И ЗОН
+           ============================================================ */
+        function renderMarkers() {
+            markersContainer.innerHTML = '';
+            animationIntervals.forEach(clearInterval);
+            animationIntervals = [];
+
+            const currentElements = elementsData.filter(el => el.floor === currentFloor);
+
+            currentElements.forEach(data => {
+                if (data.type === 'zone') {
+                    renderClickZone(data);
+                    return;
+                }
+
+                const elDiv = document.createElement('div');
+                elDiv.className = 'marker ui-element';
+                elDiv.style.left = data.x + 'px';
+                elDiv.style.top = data.y + 'px';
+                elDiv.style.width = (data.width || 60) + 'px';
+
+                const img = document.createElement('img');
+
+                if (data.frames && data.frames.length) {
+                    img.src = data.frames[0];
+                    let frameIdx = 0;
+                    const interval = setInterval(() => {
+                        frameIdx = (frameIdx + 1) % data.frames.length;
+                        img.src = data.frames[frameIdx];
+                    }, 280);
+                    animationIntervals.push(interval);
+                } else {
+                    img.src = data.image;
+                }
+
+                elDiv.appendChild(img);
+
+                let bubble = null;
+                if (data.type === 'tooltip' || !data.type) {
+                    bubble = document.createElement('div');
+                    bubble.className = 'marker-bubble';
+                    bubble.innerText = data.text || '';
+                    elDiv.appendChild(bubble);
+                }
+
+                markersContainer.appendChild(elDiv);
+
+                elDiv.addEventListener('pointerdown', (e) => {
+                    e.stopPropagation();
+                    handleMarkerClick(data, elDiv, bubble, e);
+                });
+            });
+        }
+
+        /* ===== Кликабельная зона-полигон → открывает ОКНО СЦЕНЫ ===== */
+        function renderClickZone(data) {
+            const xs = data.points.map(p => p[0]);
+            const ys = data.points.map(p => p[1]);
+            const minX = Math.min(...xs);
+            const minY = Math.min(...ys);
+            const maxX = Math.max(...xs);
+            const maxY = Math.max(...ys);
+            const w = maxX - minX;
+            const h = maxY - minY;
+
+            const zone = document.createElement('div');
+            zone.className = 'click-zone ui-element';
+            zone.style.left = minX + 'px';
+            zone.style.top = minY + 'px';
+            zone.style.width = w + 'px';
+            zone.style.height = h + 'px';
+
+            /* SVG-полигон для точной формы (без видимого контура) */
+            const svgNS = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(svgNS, 'svg');
+            svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+            svg.setAttribute('preserveAspectRatio', 'none');
+
+            const poly = document.createElementNS(svgNS, 'polygon');
+            const pts = data.points.map(p => `${p[0] - minX},${p[1] - minY}`).join(' ');
+            poly.setAttribute('points', pts);
+            poly.setAttribute('fill', 'rgba(0,0,0,0)');
+            poly.style.pointerEvents = 'all';
+            poly.style.cursor = 'pointer';
+
+            svg.appendChild(poly);
+            zone.appendChild(svg);
+
+            poly.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                burstSparks(e.clientX, e.clientY);
+                /* 👇 Зона открывает ОКНО СЦЕНЫ С РЫЧАГАМИ */
+                openPixelSceneModal(data);
+            });
+
+            markersContainer.appendChild(zone);
+        }
+
+        function handleMarkerClick(data, elDiv, bubble, e) {
+            const type = data.type || 'tooltip';
+
+            if (type === 'tooltip') {
+                document.querySelectorAll('.marker-bubble.active').forEach(b => b.classList.remove('active'));
+                if (bubble) bubble.classList.add('active');
+
+                if (elDiv.hideTimeout) clearTimeout(elDiv.hideTimeout);
+                elDiv.hideTimeout = setTimeout(() => {
+                    if (bubble) bubble.classList.remove('active');
+                }, 3000);
+
+            } else if (type === 'modal') {
+                burstSparks(e.clientX, e.clientY);
+                openPixelModal(data);
+            }
+        }
+
+        /* ============================================================
+           ПЕРЕМЕЩЕНИЕ / ЗУМ
+           ============================================================ */
+        let isDragging = false;
+        let startClientX, startClientY;
+        let startPosX, startPosY;
+        let dragDistance = 0;
+
+        viewport.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.ui-element')) return;
+            if (e.target.closest('.pixel-modal-overlay')) return;
+            if (e.target.closest('.pixel-scene-overlay')) return;
+            if (e.target.closest('.pixel-loader-overlay')) return;
+            if (e.target.closest('#start-screen')) return;
+            isDragging = true;
+            dragDistance = 0;
+            startClientX = e.clientX;
+            startClientY = e.clientY;
+            startPosX = posX;
+            startPosY = posY;
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - startClientX;
+            const dy = e.clientY - startClientY;
+            dragDistance += Math.abs(dx) + Math.abs(dy);
+
+            posX = startPosX + dx;
+            posY = startPosY + dy;
+
+            updateMapTransform();
+
+            startClientX = e.clientX;
+            startClientY = e.clientY;
+            startPosX = posX;
+            startPosY = posY;
+        });
+
+        window.addEventListener('pointerup', (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+
+            if (dragDistance < 10 && !e.target.closest('.marker')) {
+                const rect = mapWrapper.getBoundingClientRect();
+                const clickX = Math.round((e.clientX - rect.left) / scale);
+                const clickY = Math.round((e.clientY - rect.top) / scale);
+
+                const coordDisplay = document.getElementById('coords-display');
+                coordDisplay.innerText = `X: ${clickX}, Y: ${clickY}`;
+                coordDisplay.style.display = 'block';
+            }
+        });
+
+        function setZoom(newScale, originX = window.innerWidth / 2, originY = window.innerHeight / 2) {
+            const minScale = Math.max(window.innerWidth / mapWidth, window.innerHeight / mapHeight);
+            const maxScale = 2.0;
+
+            const oldScale = scale;
+            scale = Math.max(minScale, Math.min(newScale, maxScale));
+
+            const mapX = (originX - posX) / oldScale;
+            const mapY = (originY - posY) / oldScale;
+
+            posX = originX - (mapX * scale);
+            posY = originY - (mapY * scale);
+
+            updateMapTransform();
+        }
+
+        function zoomInOut(amount) {
+            setZoom(scale + amount);
+        }
+
+        viewport.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1;
+            setZoom(scale * zoomDelta, e.clientX, e.clientY);
+        }, { passive: false });
+
+        let initialPinchDist = null;
+        let initialPinchScale = null;
+        let pinchCenterX, pinchCenterY;
+
+        viewport.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                isDragging = false;
+                initialPinchDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                initialPinchScale = scale;
+                pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            }
+        }, { passive: false });
+
+        viewport.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2 && initialPinchDist) {
+                e.preventDefault();
+                const currentDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                const newScale = initialPinchScale * (currentDist / initialPinchDist);
+                setZoom(newScale, pinchCenterX, pinchCenterY);
+            }
+        }, { passive: false });
+
+        viewport.addEventListener('touchend', (e) => {
+            if (e.touches.length < 2) {
+                initialPinchDist = null;
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            setZoom(scale);
+        });
+
+        updateMapTransform();
+        switchFloor(1);
+    </script>
+</body>
+</html>
